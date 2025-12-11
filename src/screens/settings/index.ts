@@ -15,3 +15,5 @@ export { HelpScreen } from './HelpScreen';
 export { SupportScreen } from './SupportScreen';
 export { TermsScreen } from './TermsScreen';
 export { PrivacyScreen } from './PrivacyScreen';
+export { FavoritesScreen } from './FavoritesScreen';
+export { BlockedAccountsScreen } from './BlockedAccountsScreen';

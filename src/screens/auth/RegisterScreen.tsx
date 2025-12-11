@@ -26,7 +26,7 @@ import { Button, IconButton } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Card } from '../../components/common/Card';
 import { AuthStackParamList } from '../../navigation/types';
-import { registerUser, UserRole } from '../../services/auth.service';
+import { registerUser, UserRole, checkEmailAvailability } from '../../services/auth.service';
 import { validateEmail } from '../../utils/validations';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -66,6 +66,7 @@ export const RegisterScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Animation values
@@ -92,7 +93,29 @@ export const RegisterScreen: React.FC = () => {
   const loginOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Reset and trigger animations when component mounts or step changes
+    // Stop any running animations before resetting values
+    // This prevents the "JS driven animation on native node" error
+    backButtonOpacity.stopAnimation();
+    iconOpacity.stopAnimation();
+    iconTranslateY.stopAnimation();
+    titleOpacity.stopAnimation();
+    titleTranslateY.stopAnimation();
+    subtitleOpacity.stopAnimation();
+    subtitleTranslateY.stopAnimation();
+    stepIndicatorOpacity.stopAnimation();
+    field1Opacity.stopAnimation();
+    field1TranslateY.stopAnimation();
+    field2Opacity.stopAnimation();
+    field2TranslateY.stopAnimation();
+    field3Opacity.stopAnimation();
+    field3TranslateY.stopAnimation();
+    field4Opacity.stopAnimation();
+    field4TranslateY.stopAnimation();
+    buttonOpacity.stopAnimation();
+    buttonTranslateY.stopAnimation();
+    loginOpacity.stopAnimation();
+
+    // Reset values after stopping animations
     backButtonOpacity.setValue(0);
     iconOpacity.setValue(0);
     iconTranslateY.setValue(20);
@@ -314,9 +337,25 @@ export const RegisterScreen: React.FC = () => {
   };
 
   // Handle next step
-  const handleNext = () => {
+  const handleNext = async () => {
     if (validateStep1()) {
-      setStep(2);
+      setIsCheckingEmail(true);
+      try {
+        const isAvailable = await checkEmailAvailability(email.trim());
+        if (!isAvailable) {
+          setErrors(prev => ({ ...prev, email: 'This email is already registered.' }));
+          Alert.alert('Email Taken', 'An account with this email already exists. Please sign in instead.');
+        } else {
+          setStep(2);
+        }
+      } catch (error) {
+        console.error('Email check failed:', error);
+        // On error, we might choose to let them pass or warn them. 
+        // Blocking is safer for data integrity.
+        Alert.alert('Error', 'Could not verify email availability. Please check your internet connection.');
+      } finally {
+        setIsCheckingEmail(false);
+      }
     }
   };
 
@@ -347,104 +386,6 @@ export const RegisterScreen: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Role Card Component
-  const RoleCard: React.FC<{
-    role: typeof ROLES[0];
-    selected: boolean;
-    onSelect: () => void;
-    index: number;
-  }> = ({ role, selected, onSelect, index }) => {
-    const scale = useRef(new Animated.Value(1)).current;
-
-    const handlePressIn = () => {
-      Animated.spring(scale, {
-        toValue: 0.97,
-        damping: 15,
-        useNativeDriver: true,
-      }).start();
-    };
-
-    const handlePressOut = () => {
-      Animated.spring(scale, {
-        toValue: 1,
-        damping: 15,
-        useNativeDriver: true,
-      }).start();
-    };
-
-    return (
-      <Animated.View
-        style={{
-          transform: [{ scale }],
-          opacity: field1Opacity,
-          marginBottom: 12,
-        }}
-      >
-        <TouchableOpacity
-          onPress={onSelect}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          activeOpacity={1}
-        >
-          <View
-            style={[
-              styles.roleCard,
-              {
-                backgroundColor: selected
-                  ? `${theme.colors.brand.primary}10`
-                  : theme.colors.surface.secondary,
-                borderColor: selected
-                  ? theme.colors.brand.primary
-                  : theme.colors.border.light,
-                borderWidth: selected ? 2 : 1,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.roleIconContainer,
-                {
-                  backgroundColor: selected
-                    ? theme.colors.brand.primary
-                    : theme.colors.surface.tertiary,
-                },
-              ]}
-            >
-              <Ionicons
-                name={role.icon}
-                size={24}
-                color={selected ? '#FFFFFF' : theme.colors.text.secondary}
-              />
-            </View>
-            <View style={styles.roleContent}>
-              <Text variant="h4" color={selected ? 'brand' : 'primary'}>
-                {role.title}
-              </Text>
-              <Text variant="bodySmall" color="secondary" style={styles.roleDescription}>
-                {role.description}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.roleCheck,
-                {
-                  backgroundColor: selected
-                    ? theme.colors.brand.primary
-                    : 'transparent',
-                  borderColor: selected
-                    ? theme.colors.brand.primary
-                    : theme.colors.border.medium,
-                },
-              ]}
-            >
-              {selected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
-    );
   };
 
   return (
@@ -645,6 +586,7 @@ export const RegisterScreen: React.FC = () => {
                   variant="gradient"
                   size="lg"
                   fullWidth
+                  loading={isCheckingEmail}
                   icon="arrow-forward"
                   iconPosition="right"
                   onPress={handleNext}
@@ -660,6 +602,8 @@ export const RegisterScreen: React.FC = () => {
                   selected={selectedRole === role.id}
                   onSelect={() => setSelectedRole(role.id)}
                   index={index}
+                  theme={theme}
+                  animOpacity={field1Opacity}
                 />
               ))}
 
@@ -700,6 +644,105 @@ export const RegisterScreen: React.FC = () => {
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
+  );
+};
+
+const RoleCard: React.FC<{
+  role: typeof ROLES[0];
+  selected: boolean;
+  onSelect: () => void;
+  index: number;
+  theme: any;
+  animOpacity: Animated.Value;
+}> = ({ role, selected, onSelect, index, theme, animOpacity }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.97,
+      damping: 15,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      damping: 15,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View
+      style={{
+        transform: [{ scale }],
+        opacity: animOpacity,
+        marginBottom: 12,
+      }}
+    >
+      <TouchableOpacity
+        onPress={onSelect}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+      >
+        <View
+          style={[
+            styles.roleCard,
+            {
+              backgroundColor: selected
+                ? `${theme.colors.brand.primary}10`
+                : theme.colors.surface.secondary,
+              borderColor: selected
+                ? theme.colors.brand.primary
+                : theme.colors.border.light,
+              borderWidth: selected ? 2 : 1,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.roleIconContainer,
+              {
+                backgroundColor: selected
+                  ? theme.colors.brand.primary
+                  : theme.colors.surface.tertiary,
+              },
+            ]}
+          >
+            <Ionicons
+              name={role.icon}
+              size={24}
+              color={selected ? '#FFFFFF' : theme.colors.text.secondary}
+            />
+          </View>
+          <View style={styles.roleContent}>
+            <Text variant="h4" color={selected ? 'brand' : 'primary'}>
+              {role.title}
+            </Text>
+            <Text variant="bodySmall" color="secondary" style={styles.roleDescription}>
+              {role.description}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.roleCheck,
+              {
+                backgroundColor: selected
+                  ? theme.colors.brand.primary
+                  : 'transparent',
+                borderColor: selected
+                  ? theme.colors.brand.primary
+                  : theme.colors.border.medium,
+              },
+            ]}
+          >
+            {selected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 

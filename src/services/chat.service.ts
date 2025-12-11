@@ -92,14 +92,19 @@ const createParticipant = (
   userName: string,
   userRole: 'client' | 'lawyer' | 'corporate',
   userAvatar?: string
-): ChatParticipant => ({
-  userId,
-  userName,
-  userAvatar,
-  userRole,
-  joinedAt: Timestamp.now(),
-  unreadCount: 0,
-});
+): ChatParticipant => {
+  const participant: any = {
+    userId,
+    userName,
+    userRole,
+    joinedAt: Timestamp.now(),
+    unreadCount: 0,
+  };
+  if (userAvatar) {
+    participant.userAvatar = userAvatar;
+  }
+  return participant as ChatParticipant;
+};
 
 // Functions
 
@@ -147,16 +152,23 @@ export const createConversation = async (
       createParticipant(p.userId, p.userName, p.userRole, p.userAvatar)
     );
 
-    const conversationData: Omit<Conversation, 'id'> = {
+    const conversationData: any = {
       participants: chatParticipants,
       participantIds: participants.map(p => p.userId).sort(),
-      caseId,
       type,
-      title: type === 'group' || type === 'case' ? title : undefined,
-      createdAt: serverTimestamp() as Timestamp,
-      updatedAt: serverTimestamp() as Timestamp,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
       createdBy: createdBy || participants[0].userId,
+      archived: false,
     };
+
+    // Only add optional fields if they have values
+    if (caseId) {
+      conversationData.caseId = caseId;
+    }
+    if ((type === 'group' || type === 'case') && title) {
+      conversationData.title = title;
+    }
 
     const docRef = await addDoc(
       collection(db, CHAT_COLLECTIONS.CONVERSATIONS),

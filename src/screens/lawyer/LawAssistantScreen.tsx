@@ -16,12 +16,15 @@ import {
     Platform,
     ActivityIndicator,
     Alert,
+    Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import {
     sendAIMessage,
+    sendAIMessageWithImage,
     getAIChatHistory,
     subscribeToAIChat,
     AIMessage,
@@ -41,6 +44,7 @@ export const LawAssistantScreen = ({ navigation, route }: any) => {
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [selectedImage, setSelectedImage] = useState<{ uri: string; base64: string; mimeType: string } | null>(null);
     const flatListRef = useRef<FlatList>(null);
 
     // Optional: Pre-load case context if passed from case detail screen
@@ -109,8 +113,65 @@ export const LawAssistantScreen = ({ navigation, route }: any) => {
         }
     };
 
+    const handlePickImage = async () => {
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'We need camera roll permissions to upload documents.');
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: false,
+                quality: 0.8,
+                base64: true,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                const asset = result.assets[0];
+                setSelectedImage({
+                    uri: asset.uri,
+                    base64: asset.base64 || '',
+                    mimeType: asset.mimeType || 'image/jpeg',
+                });
+            }
+        } catch (error) {
+            console.error('Error picking image:', error);
+            Alert.alert('Error', 'Failed to pick image. Please try again.');
+        }
+    };
+
+    const handleTakePhoto = async () => {
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'We need camera permissions to take photos.');
+                return;
+            }
+
+            const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: false,
+                quality: 0.8,
+                base64: true,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                const asset = result.assets[0];
+                setSelectedImage({
+                    uri: asset.uri,
+                    base64: asset.base64 || '',
+                    mimeType: asset.mimeType || 'image/jpeg',
+                });
+            }
+        } catch (error) {
+            console.error('Error taking photo:', error);
+            Alert.alert('Error', 'Failed to take photo. Please try again.');
+        }
+    };
+
     const handleSendMessage = async () => {
-        if (!inputText.trim() || !user) return;
+        if ((!inputText.trim() && !selectedImage) || !user) return;
 
         const userMessage = inputText.trim();
         setInputText('');
@@ -122,7 +183,7 @@ export const LawAssistantScreen = ({ navigation, route }: any) => {
                 userId: user.uid,
                 chatType: 'LAW_ASSISTANT',
                 role: 'user',
-                content: userMessage,
+                content: selectedImage ? (userMessage || '[Document uploaded]') : userMessage,
                 timestamp: new Date(),
             };
             setMessages((prev) => [...prev, tempUserMessage]);
@@ -130,14 +191,27 @@ export const LawAssistantScreen = ({ navigation, route }: any) => {
             // Get conversation history (last 10 messages for context)
             const conversationHistory = messages.slice(-10);
 
-            // Send to AI and get response
-            await sendAIMessage(
-                user.uid,
-                'LAW_ASSISTANT',
-                userMessage,
-                conversationHistory,
-                sessionId
-            );
+            // Send to AI with or without image
+            if (selectedImage) {
+                await sendAIMessageWithImage(
+                    user.uid,
+                    'LAW_ASSISTANT',
+                    userMessage,
+                    selectedImage.base64,
+                    selectedImage.mimeType,
+                    conversationHistory,
+                    sessionId
+                );
+                setSelectedImage(null);
+            } else {
+                await sendAIMessage(
+                    user.uid,
+                    'LAW_ASSISTANT',
+                    userMessage,
+                    conversationHistory,
+                    sessionId
+                );
+            }
 
             // AI response will be added via real-time subscription
         } catch (error: any) {
@@ -290,10 +364,50 @@ export const LawAssistantScreen = ({ navigation, route }: any) => {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
+                {/* Image Preview */}
+                {selectedImage && (
+                    <View style={styles.imagePreviewContainer}>
+                        <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} />
+                        <TouchableOpacity
+                            style={styles.removeImageButton}
+                            onPress={() => setSelectedImage(null)}
+                        >
+                            <Ionicons name="close-circle" size={24} color="#EF4444" />
+                        </TouchableOpacity>
+                        <Text style={styles.imagePreviewText}>Document attached</Text>
+                    </View>
+                )}
+
                 <View style={styles.inputContainer}>
+                    {/* Attachment Button */}
+                    <TouchableOpacity
+                        style={styles.attachButton}
+                        onPress={handlePickImage}
+                        disabled={isLoading}
+                    >
+                        <Ionicons
+                            name="attach"
+                            size={24}
+                            color={isLoading ? colors.gray[400] : colors.primary[500]}
+                        />
+                    </TouchableOpacity>
+
+                    {/* Camera Button */}
+                    <TouchableOpacity
+                        style={styles.attachButton}
+                        onPress={handleTakePhoto}
+                        disabled={isLoading}
+                    >
+                        <Ionicons
+                            name="camera-outline"
+                            size={22}
+                            color={isLoading ? colors.gray[400] : colors.primary[500]}
+                        />
+                    </TouchableOpacity>
+
                     <TextInput
                         style={styles.input}
-                        placeholder="Ask for case analysis, legal research, or strategy..."
+                        placeholder={selectedImage ? "Add a message (optional)..." : "Ask for case analysis, legal research, or strategy..."}
                         placeholderTextColor={colors.gray[400]}
                         value={inputText}
                         onChangeText={setInputText}
@@ -304,15 +418,15 @@ export const LawAssistantScreen = ({ navigation, route }: any) => {
                     <TouchableOpacity
                         style={[
                             styles.sendButton,
-                            (!inputText.trim() || isLoading) && styles.sendButtonDisabled,
+                            (!inputText.trim() && !selectedImage || isLoading) && styles.sendButtonDisabled,
                         ]}
                         onPress={handleSendMessage}
-                        disabled={!inputText.trim() || isLoading}
+                        disabled={(!inputText.trim() && !selectedImage) || isLoading}
                     >
                         <Ionicons
                             name="send"
                             size={20}
-                            color={inputText.trim() && !isLoading ? colors.white : colors.gray[400]}
+                            color={(inputText.trim() || selectedImage) && !isLoading ? colors.white : colors.gray[400]}
                         />
                     </TouchableOpacity>
                 </View>
@@ -499,5 +613,31 @@ const styles = StyleSheet.create({
     },
     sendButtonDisabled: {
         backgroundColor: colors.gray[200],
+    },
+    attachButton: {
+        padding: spacing.xs,
+        marginRight: spacing.xs,
+    },
+    imagePreviewContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        backgroundColor: colors.gray[50],
+        borderTopWidth: 1,
+        borderTopColor: colors.gray[200],
+    },
+    imagePreview: {
+        width: 60,
+        height: 60,
+        borderRadius: 8,
+    },
+    removeImageButton: {
+        marginLeft: spacing.sm,
+    },
+    imagePreviewText: {
+        ...typography.caption,
+        color: colors.gray[600],
+        marginLeft: spacing.sm,
     },
 });

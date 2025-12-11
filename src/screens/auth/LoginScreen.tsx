@@ -27,6 +27,7 @@ import { Input } from '../../components/common/Input';
 import { AuthStackParamList } from '../../navigation/types';
 import { loginUser } from '../../services/auth.service';
 import { validateEmail } from '../../utils/validations';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -40,6 +41,9 @@ export const LoginScreen: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  // Google auth
+  const { signInWithGoogle, loading: googleLoading, error: googleError } = useGoogleAuth();
 
   // Animation values
   const backButtonOpacity = useRef(new Animated.Value(0)).current;
@@ -428,7 +432,8 @@ export const LoginScreen: React.FC = () => {
           >
             <TouchableOpacity
               style={[styles.socialButton, { backgroundColor: theme.colors.surface.secondary }]}
-              onPress={() => Alert.alert('Coming Soon', 'Google sign-in will be available soon.')}
+              onPress={signInWithGoogle}
+              disabled={googleLoading}
             >
               <Ionicons name="logo-google" size={22} color={theme.colors.text.primary} />
             </TouchableOpacity>

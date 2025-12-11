@@ -78,10 +78,63 @@ export const LawyersScreen: React.FC = () => {
     if (searchQuery.trim() === '') {
       setFilteredLawyers(lawyers);
     } else {
-      const filtered = lawyers.filter(lawyer =>
-        lawyer.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lawyer.email.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      const query = searchQuery.toLowerCase().trim();
+
+      // Score-based filtering for better recommendations
+      const scoredLawyers = lawyers.map(lawyer => {
+        let score = 0;
+
+        // Exact name match gets highest score
+        if (lawyer.fullName.toLowerCase().includes(query)) {
+          score += 10;
+          // Bonus for starting with query
+          if (lawyer.fullName.toLowerCase().startsWith(query)) {
+            score += 5;
+          }
+        }
+
+        // Specialization match
+        if (lawyer.specializations?.some(s =>
+          s.toLowerCase().replace(/_/g, ' ').includes(query)
+        )) {
+          score += 8;
+        }
+
+        // Service area (city) match
+        if (lawyer.serviceAreas?.some(area =>
+          area.toLowerCase().includes(query)
+        )) {
+          score += 6;
+        }
+
+        // Bio match
+        if (lawyer.bio?.toLowerCase().includes(query)) {
+          score += 4;
+        }
+
+        // Email match
+        if (lawyer.email?.toLowerCase().includes(query)) {
+          score += 3;
+        }
+
+        // Bar ID match (for specific searches)
+        if (lawyer.barId?.toLowerCase().includes(query)) {
+          score += 2;
+        }
+
+        return { lawyer, score };
+      });
+
+      // Filter out non-matches and sort by score (highest first)
+      const filtered = scoredLawyers
+        .filter(item => item.score > 0)
+        .sort((a, b) => {
+          // First by score, then by rating
+          if (b.score !== a.score) return b.score - a.score;
+          return (b.lawyer.ratingAverage || 0) - (a.lawyer.ratingAverage || 0);
+        })
+        .map(item => item.lawyer);
+
       setFilteredLawyers(filtered);
     }
   }, [searchQuery, lawyers]);

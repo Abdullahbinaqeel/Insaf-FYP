@@ -13,6 +13,7 @@ import {
   Switch,
   Alert,
   Animated,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +31,8 @@ const PROFILE_MENU = [
       { id: 'edit', icon: 'person-outline', label: 'Edit Profile', route: 'EditProfile' },
       { id: 'verification', icon: 'shield-checkmark-outline', label: 'Verification Status', route: 'Verification' },
       { id: 'documents', icon: 'document-text-outline', label: 'My Documents', route: 'Documents' },
+      { id: 'favorites', icon: 'heart-outline', label: 'Favorite Lawyers', route: 'Favorites' },
+      { id: 'blocked', icon: 'ban-outline', label: 'Blocked Accounts', route: 'BlockedAccounts' },
     ],
   },
   {
@@ -161,9 +164,16 @@ export const ProfileScreen: React.FC = () => {
                 colors={['#d4af37', '#f4d03f']}
                 style={styles.avatarGradient}
               >
-                <Ionicons name="person" size={40} color="#1a365d" />
+                {user?.photoURL ? (
+                  <Image
+                    source={{ uri: user.photoURL }}
+                    style={styles.avatarImage}
+                  />
+                ) : (
+                  <Ionicons name="person" size={40} color="#1a365d" />
+                )}
               </LinearGradient>
-              <TouchableOpacity style={styles.editAvatarButton}>
+              <TouchableOpacity style={styles.editAvatarButton} onPress={() => navigation.navigate('EditProfile')}>
                 <Ionicons name="camera" size={14} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
@@ -346,6 +356,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+  },
+  avatarImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 28,
   },
   editAvatarButton: {
     position: 'absolute',

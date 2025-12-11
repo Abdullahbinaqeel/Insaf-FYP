@@ -9,6 +9,7 @@ import {
   UserCredential,
   onAuthStateChanged,
   Unsubscribe,
+  fetchSignInMethodsForEmail,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
@@ -20,6 +21,7 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
+  photoURL?: string;
   role: UserRole;
   phone?: string;
   createdAt: any;
@@ -95,6 +97,20 @@ export const resetPassword = async (email: string): Promise<void> => {
   try {
     await sendPasswordResetEmail(auth, email);
   } catch (error) {
+    throw error;
+  }
+};
+
+// Check if email is already available (not in use)
+export const checkEmailAvailability = async (email: string): Promise<boolean> => {
+  try {
+    const methods = await fetchSignInMethodsForEmail(auth, email);
+    return methods.length === 0;
+  } catch (error) {
+    // If the error is 'auth/invalid-email', we can count it as not available or just throw
+    // But usually we just want to know if it's taken. 
+    // If user enumeration protection is on, this might act differently?
+    // In many firebase setups, this works.
     throw error;
   }
 };

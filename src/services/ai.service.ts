@@ -182,6 +182,128 @@ export const sendAIMessage = async (
 };
 
 /**
+ * Send message with image to AI (Gemini Vision)
+ */
+export const sendAIMessageWithImage = async (
+    userId: string,
+    chatType: AIChatType,
+    userMessage: string,
+    imageBase64: string,
+    imageMimeType: string,
+    conversationHistory: AIMessage[] = [],
+    sessionId?: string
+): Promise<AIResponse> => {
+    try {
+        // Validate API configuration
+        if (!validateAIConfig()) {
+            throw new Error('AI API not configured. Please add your API key in ai.config.ts');
+        }
+
+        // Only Gemini supports vision in this implementation
+        if (AI_CONFIG.provider !== 'gemini') {
+            throw new Error('Image analysis is only supported with Gemini provider');
+        }
+
+        // Get system prompt based on chat type
+        const systemPrompt =
+            chatType === 'LAW_COACH'
+                ? AI_CONFIG.systemPrompts.lawCoach
+                : AI_CONFIG.systemPrompts.lawAssistant;
+
+        // Build conversation context for Gemini Vision
+        const conversationContext = conversationHistory
+            .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+            .join('\n\n');
+
+        const fullPrompt = `${systemPrompt}\n\n${conversationContext}\n\nUser has uploaded an image${userMessage ? ` and says: "${userMessage}"` : ''}. Please analyze this image and respond according to your guidelines.\n\nAssistant:`;
+
+        // Dynamic URL construction using the configured model
+        const baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
+        const url = `${baseUrl}/${AI_CONFIG.model}:generateContent?key=${AI_CONFIG.apiKey}`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contents: [
+                    {
+                        parts: [
+                            {
+                                text: fullPrompt,
+                            },
+                            {
+                                inline_data: {
+                                    mime_type: imageMimeType,
+                                    data: imageBase64,
+                                },
+                            },
+                        ],
+                    },
+                ],
+                generationConfig: {
+                    temperature: AI_CONFIG.temperature,
+                    maxOutputTokens: AI_CONFIG.maxTokens,
+                },
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || 'Gemini Vision API error');
+        }
+
+        const data = await response.json();
+        const aiMessage = data.candidates[0].content.parts[0].text;
+
+        const aiResponse: AIResponse = {
+            message: aiMessage,
+            metadata: {
+                model: AI_CONFIG.model,
+                tokens: 0,
+            },
+        };
+
+        // Save user message to Firestore (indicate image was attached)
+        await createDocument(COLLECTIONS.AI_MESSAGES, {
+            userId,
+            chatType,
+            sessionId,
+            role: 'user',
+            content: userMessage || '[Image uploaded for analysis]',
+            timestamp: serverTimestamp(),
+            metadata: { hasImage: true, imageMimeType },
+        });
+
+        // Save AI response to Firestore
+        await createDocument(COLLECTIONS.AI_MESSAGES, {
+            userId,
+            chatType,
+            sessionId,
+            role: 'assistant',
+            content: aiResponse.message,
+            timestamp: serverTimestamp(),
+            metadata: aiResponse.metadata,
+        });
+
+        // Update session if sessionId exists
+        if (sessionId) {
+            await updateDocument(COLLECTIONS.AI_SESSIONS, sessionId, {
+                lastMessage: aiResponse.message.substring(0, 100) + (aiResponse.message.length > 100 ? '...' : ''),
+                messageCount: conversationHistory.length + 2,
+                updatedAt: serverTimestamp(),
+            });
+        }
+
+        return aiResponse;
+    } catch (error) {
+        console.error('AI Vision Service Error:', error);
+        throw error;
+    }
+};
+
+/**
  * Call OpenAI API
  */
 const callOpenAI = async (messages: any[]): Promise<AIResponse> => {

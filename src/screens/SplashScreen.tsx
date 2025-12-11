@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, Dimensions, Text as RNText } from 'react-native';
+import { View, StyleSheet, Dimensions, Text as RNText, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -21,21 +21,10 @@ export const SplashScreen: React.FC = () => {
     >
       {/* Logo */}
       <View style={styles.logoContainer}>
-        <LinearGradient
-          colors={['#d4af37', '#f4d03f', '#d4af37']}
-          style={styles.logoGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Ionicons name="shield-checkmark" size={60} color="#1a365d" />
-        </LinearGradient>
+        <Image source={require('../../assets/logo.png')} style={styles.logo} />
       </View>
 
-      {/* App Name */}
-      <RNText style={styles.appName}>INSAF</RNText>
 
-      {/* Tagline */}
-      <RNText style={styles.tagline}>Justice at Your Fingertips</RNText>
 
       {/* Bottom decoration */}
       <View style={styles.bottomDecoration}>
@@ -67,6 +56,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 12,
+  },
+  logo: {
+    width: width * 0.8,
+    height: width * 0.8,
+    resizeMode: 'contain',
   },
   appName: {
     fontSize: 48,

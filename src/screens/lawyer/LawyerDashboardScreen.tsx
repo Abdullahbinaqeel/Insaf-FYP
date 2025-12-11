@@ -14,9 +14,9 @@ import {
   RefreshControl,
   Animated,
   Switch,
-  SafeAreaView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -101,15 +101,30 @@ export const LawyerDashboardScreen: React.FC = () => {
     if (!user?.uid) return;
 
     try {
-      // Fetch dashboard stats and activity in parallel
+      // 1. Fetch Profile First (Critical for Verification Status)
+      try {
+        const lawyerProfile = await getLawyerProfile(user.uid);
+        if (lawyerProfile) {
+          setIsAvailable(lawyerProfile.availabilityStatus === 'AVAILABLE');
+          setSpecialization(lawyerProfile.specializations.join(' & ') || 'Legal Services');
+
+          // Should update stats with verification status immediately if stats exist, 
+          // otherwise we set it when stats arrive.
+          // But here we can't easily set "partial" stats if stats is null.
+          // So we'll need to store verificationStatus separately or merge it carefully.
+        }
+      } catch (e) {
+        console.error('Error fetching profile for dashboard:', e);
+      }
+
+      // 2. Fetch Stats and Activity (Parallel)
       const [dashboardStats, activities, lawyerProfile] = await Promise.all([
         getLawyerDashboardStats(user.uid),
         getActivityFeed(user.uid, 5),
-        getLawyerProfile(user.uid),
+        getLawyerProfile(user.uid) // Fetching again to be sure, or we could optimize
       ]);
 
       if (lawyerProfile) {
-        // Merge verification status into stats
         setStats({
           ...dashboardStats,
           verificationStatus: lawyerProfile.verificationStatus as 'VERIFIED' | 'PENDING' | 'UNVERIFIED',
@@ -119,10 +134,31 @@ export const LawyerDashboardScreen: React.FC = () => {
       } else {
         setStats(dashboardStats);
       }
-
       setRecentActivity(activities);
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      // Fallback: If Promise.all fails, try to at least get the profile to show verification
+      try {
+        const lawyerProfile = await getLawyerProfile(user.uid);
+        if (lawyerProfile) {
+          setStats((prev) => ({
+            ...prev || {
+              activeCases: 0,
+              pendingBids: 0,
+              totalEarnings: 0,
+              averageRating: 0,
+              totalReviews: 0,
+              upcomingConsultations: 0
+            },
+            verificationStatus: lawyerProfile.verificationStatus as 'VERIFIED' | 'PENDING' | 'UNVERIFIED',
+          }));
+          setIsAvailable(lawyerProfile.availabilityStatus === 'AVAILABLE');
+          setSpecialization(lawyerProfile.specializations.join(' & ') || 'Legal Services');
+        }
+      } catch (repoError) {
+        console.error('Fallback profile fetch failed:', repoError);
+      }
     } finally {
       setLoading(false);
     }

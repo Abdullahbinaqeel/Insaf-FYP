@@ -12,14 +12,10 @@ import { useAppTheme } from '../context/ThemeContext';
 
 // Import actual screens
 import { WelcomeScreen, LoginScreen, RegisterScreen } from '../screens/auth';
+import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { Text } from '../components/common/Text';
 
 // Placeholder screens for screens not yet created
-const ForgotPasswordScreen = () => (
-  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-    <Text>Forgot Password Screen (Coming Soon)</Text>
-  </View>
-);
 
 const OTPVerificationScreen = () => (
   <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>

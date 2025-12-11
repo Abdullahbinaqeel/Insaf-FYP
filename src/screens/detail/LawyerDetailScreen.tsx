@@ -13,6 +13,7 @@ import {
   Dimensions,
   Animated,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +27,14 @@ import { getFollowStats, FollowStats } from '../../services/follow.service';
 import { useAuth } from '../../context/AuthContext';
 import { LawyerProfile, getLawyerProfile } from '../../services/lawyer.service';
 import { Card } from '../../components/common/Card';
+import {
+  isFavorite,
+  toggleFavorite,
+  isBlocked,
+  blockUser,
+  unblockUser
+} from '../../services/userPreferences.service';
+import { createConversation } from '../../services/chat.service';
 
 const { width } = Dimensions.get('window');
 
@@ -66,6 +75,8 @@ export const LawyerDetailScreen = () => {
   const [loading, setLoading] = useState(true);
   const [lawyer, setLawyer] = useState<LawyerProfile | null>(null);
   const [followStats, setFollowStats] = useState<FollowStats>({ followerCount: 0, followingCount: 0, isFollowing: false });
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [isBlockedUser, setIsBlockedUser] = useState(false);
 
   // Use passed lawyerId or fallback to sample ID if testing
   const lawyerId = route.params?.lawyerId || LAWYER_DATA.id;
@@ -98,6 +109,16 @@ export const LawyerDetailScreen = () => {
             followingCount: data.followingCount || 0,
             isFollowing: false
           });
+        }
+
+        // Check favorite and blocked status
+        if (user) {
+          const [favStatus, blockStatus] = await Promise.all([
+            isFavorite(user.uid, lawyerId),
+            isBlocked(user.uid, lawyerId)
+          ]);
+          setIsFavorited(favStatus);
+          setIsBlockedUser(blockStatus);
         }
       } else {
         // Map sample data to LawyerProfile interface for rendering
@@ -142,6 +163,81 @@ export const LawyerDetailScreen = () => {
     }));
   };
 
+  const handleToggleFavorite = async () => {
+    if (!user?.uid) return;
+    try {
+      const newStatus = await toggleFavorite(user.uid, lawyerId);
+      setIsFavorited(newStatus);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update favorites');
+    }
+  };
+
+  const handleBlockUser = () => {
+    if (!user?.uid || !lawyer) return;
+
+    Alert.alert(
+      isBlockedUser ? 'Unblock User' : 'Block User',
+      isBlockedUser
+        ? `Are you sure you want to unblock ${lawyer.fullName}?`
+        : `Are you sure you want to block ${lawyer.fullName}? They won't be able to contact you.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: isBlockedUser ? 'Unblock' : 'Block',
+          style: isBlockedUser ? 'default' : 'destructive',
+          onPress: async () => {
+            try {
+              if (isBlockedUser) {
+                await unblockUser(user.uid, lawyerId);
+              } else {
+                await blockUser(user.uid, lawyerId);
+                setIsFavorited(false); // Remove from favorites when blocking
+              }
+              setIsBlockedUser(!isBlockedUser);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update block status');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleStartChat = async () => {
+    if (!user?.uid || !lawyer) return;
+
+    try {
+      // Create or get existing conversation
+      const conversationId = await createConversation(
+        [
+          {
+            userId: user.uid,
+            userName: user.displayName || 'User',
+            userRole: 'client',
+          },
+          {
+            userId: lawyer.userId,
+            userName: lawyer.fullName,
+            userRole: 'lawyer',
+          }
+        ],
+        undefined,
+        'direct'
+      );
+
+      // Navigate to chat detail
+      navigation.navigate('ChatDetail', {
+        conversationId,
+        lawyerName: lawyer.fullName,
+        lawyerId: lawyer.userId,
+      });
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      Alert.alert('Error', 'Failed to start conversation. Please try again.');
+    }
+  };
+
   if (loading || !lawyer) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background.primary }]}>
@@ -174,11 +270,19 @@ export const LawyerDetailScreen = () => {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.actionIcons}>
-              <TouchableOpacity style={styles.iconButton}>
-                <Ionicons name="share-social-outline" size={24} color="#FFFFFF" />
+              <TouchableOpacity style={styles.iconButton} onPress={handleBlockUser}>
+                <Ionicons
+                  name={isBlockedUser ? "ban" : "ban-outline"}
+                  size={24}
+                  color={isBlockedUser ? "#EF4444" : "#FFFFFF"}
+                />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.iconButton}>
-                <Ionicons name="heart-outline" size={24} color="#FFFFFF" />
+              <TouchableOpacity style={styles.iconButton} onPress={handleToggleFavorite}>
+                <Ionicons
+                  name={isFavorited ? "heart" : "heart-outline"}
+                  size={24}
+                  color={isFavorited ? "#EF4444" : "#FFFFFF"}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -360,7 +464,13 @@ export const LawyerDetailScreen = () => {
       {/* Bottom Action Bar */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16, backgroundColor: theme.colors.surface.primary }]}>
         <View style={styles.bottomBarContent}>
-          <View style={{ flex: 1, marginRight: 16 }}>
+          <TouchableOpacity
+            style={[styles.messageButton, { backgroundColor: theme.colors.surface.secondary }]}
+            onPress={handleStartChat}
+          >
+            <Ionicons name="chatbubble-outline" size={22} color={theme.colors.brand.primary} />
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginHorizontal: 12 }}>
             <FollowButton
               lawyerId={lawyerId}
               lawyerName={lawyer?.fullName || 'Lawyer'}
@@ -369,9 +479,9 @@ export const LawyerDetailScreen = () => {
             />
           </View>
           <Button
-            label="Book Consultation"
+            title="Book"
             onPress={() => navigation.navigate('BookConsultation', { lawyerId })}
-            style={{ flex: 2 }}
+            style={{ flex: 1 }}
           />
         </View>
       </View>
@@ -556,5 +666,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  messageButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

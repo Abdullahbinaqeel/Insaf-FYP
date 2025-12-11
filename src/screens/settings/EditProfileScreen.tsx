@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -26,12 +27,14 @@ import { useAuth } from '../../context/AuthContext';
 import { Text } from '../../components/common/Text';
 import { Card } from '../../components/common/Card';
 import { getLawyerProfile, updateLawyerProfile, LawyerProfile } from '../../services/lawyer.service';
+import { updateUserProfile } from '../../services/auth.service';
+import { uploadProfileImage } from '../../services/storage.service';
 
 export const EditProfileScreen: React.FC = () => {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const { user, updateProfile } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -44,6 +47,8 @@ export const EditProfileScreen: React.FC = () => {
   const [experienceYears, setExperienceYears] = useState('');
   const [hourlyRate, setHourlyRate] = useState('');
   const [consultationFee, setConsultationFee] = useState('');
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const isLawyer = user?.role === 'LAWYER' || user?.role === 'LAW_FIRM';
 
@@ -54,6 +59,8 @@ export const EditProfileScreen: React.FC = () => {
 
       try {
         setDisplayName(user.displayName || '');
+        setPhone((user as any).phone || '');
+        setProfileImage((user as any).photoURL || null);
 
         if (isLawyer) {
           const profile = await getLawyerProfile(user.uid);
@@ -63,6 +70,9 @@ export const EditProfileScreen: React.FC = () => {
             setExperienceYears(profile.experienceYears?.toString() || '');
             setHourlyRate(profile.hourlyRate?.toString() || '');
             setConsultationFee(profile.consultationFee?.toString() || '');
+            if (profile.profileImage) {
+              setProfileImage(profile.profileImage);
+            }
           }
         }
       } catch (error) {
@@ -90,9 +100,23 @@ export const EditProfileScreen: React.FC = () => {
       quality: 0.8,
     });
 
-    if (!result.canceled) {
-      // TODO: Upload image to storage and update profile
-      Alert.alert('Success', 'Profile picture will be updated');
+    if (!result.canceled && result.assets[0] && user?.uid) {
+      setUploadingImage(true);
+      try {
+        // Fetch the image as blob
+        const response = await fetch(result.assets[0].uri);
+        const blob = await response.blob();
+
+        // Upload to Firebase Storage
+        const downloadURL = await uploadProfileImage(user.uid, blob, 'jpg');
+        setProfileImage(downloadURL);
+        Alert.alert('Success', 'Profile picture uploaded successfully!');
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        Alert.alert('Error', 'Failed to upload image. Please try again.');
+      } finally {
+        setUploadingImage(false);
+      }
     }
   };
 
@@ -101,24 +125,44 @@ export const EditProfileScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      // Update display name in auth
-      if (displayName !== user.displayName) {
-        await updateProfile({ displayName });
+      // Build update data for user profile
+      const updateData: any = {
+        displayName,
+        phone,
+      };
+
+      // Add profile image if it was changed
+      if (profileImage) {
+        updateData.photoURL = profileImage;
       }
 
+      // Update user profile in Firestore
+      await updateUserProfile(user.uid, updateData);
+
       // Update lawyer profile if applicable
-      if (isLawyer && lawyerProfile) {
-        await updateLawyerProfile(user.uid, {
+      if (isLawyer) {
+        const lawyerUpdateData: any = {
           bio,
           experienceYears: parseInt(experienceYears) || 0,
           hourlyRate: parseInt(hourlyRate) || 0,
           consultationFee: parseInt(consultationFee) || 0,
-        });
+          fullName: displayName,
+        };
+
+        if (profileImage) {
+          lawyerUpdateData.profileImage = profileImage;
+        }
+
+        await updateLawyerProfile(user.uid, lawyerUpdateData);
       }
 
-      Alert.alert('Success', 'Profile updated successfully');
+      // Refresh user context to reflect changes
+      await refreshUser();
+
+      Alert.alert('Success', 'Profile updated successfully!');
       navigation.goBack();
     } catch (error) {
+      console.error('Error updating profile:', error);
       Alert.alert('Error', 'Failed to update profile. Please try again.');
     } finally {
       setSaving(false);
@@ -160,19 +204,30 @@ export const EditProfileScreen: React.FC = () => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Profile Picture */}
         <View style={styles.avatarSection}>
-          <TouchableOpacity onPress={handlePickImage}>
-            <LinearGradient
-              colors={['#d4af37', '#f4d03f']}
-              style={styles.avatar}
-            >
-              <Ionicons name="person" size={40} color="#1a365d" />
-            </LinearGradient>
+          <TouchableOpacity onPress={handlePickImage} disabled={uploadingImage}>
+            {profileImage ? (
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.avatar}
+              />
+            ) : (
+              <LinearGradient
+                colors={['#d4af37', '#f4d03f']}
+                style={styles.avatar}
+              >
+                <Ionicons name="person" size={40} color="#1a365d" />
+              </LinearGradient>
+            )}
             <View style={[styles.cameraButton, { backgroundColor: theme.colors.brand.primary }]}>
-              <Ionicons name="camera" size={16} color="#FFFFFF" />
+              {uploadingImage ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="camera" size={16} color="#FFFFFF" />
+              )}
             </View>
           </TouchableOpacity>
           <Text variant="bodySmall" color="secondary" style={{ marginTop: 8 }}>
-            Tap to change photo
+            {uploadingImage ? 'Uploading...' : 'Tap to change photo'}
           </Text>
         </View>
 

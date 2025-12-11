@@ -14,19 +14,24 @@ import {
   TextInput as RNTextInput,
   Image,
   Animated,
-  SafeAreaView,
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Text } from '../../components/common/Text';
 import { updateLawyerProfile } from '../../services/lawyer.service';
+import { updateUserProfile } from '../../services/auth.service'; // Import user update service
+import { updateProfile } from 'firebase/auth'; // Import firebase auth update
+import { auth } from '../../config/firebase'; // Import auth instance
 import { AreaOfLaw } from '../../services/case.service';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadProfileImage } from '../../services/storage.service';
 
 // TypeScript Interfaces
 interface FormData {
@@ -96,16 +101,19 @@ const CheckboxItem: React.FC<CheckboxItemProps> = ({ label, value, isSelected, o
 
 // Practice Areas
 const PRACTICE_AREAS: { label: string; value: AreaOfLaw }[] = [
-  { label: 'Criminal Law', value: 'CRIMINAL' },
-  { label: 'Civil Law', value: 'CIVIL' },
-  { label: 'Corporate Law', value: 'CORPORATE' },
-  { label: 'Family Law', value: 'FAMILY' },
-  { label: 'Property Law', value: 'PROPERTY' },
-  { label: 'Tax Law', value: 'TAX' },
-  { label: 'Labor Law', value: 'LABOR' },
-  { label: 'Immigration', value: 'IMMIGRATION' },
-  { label: 'Intellectual Property', value: 'IP' },
-  { label: 'Environmental', value: 'ENVIRONMENTAL' },
+  { label: 'Criminal Law', value: 'CRIMINAL_LAW' },
+  { label: 'Civil Law', value: 'CIVIL_LAW' },
+  { label: 'Corporate Law', value: 'CORPORATE_LAW' },
+  { label: 'Family Law', value: 'FAMILY_LAW' },
+  { label: 'Property Law', value: 'PROPERTY_LAW' },
+  { label: 'Tax Law', value: 'TAX_LAW' },
+  { label: 'Labor Law', value: 'LABOR_LAW' },
+  { label: 'Immigration', value: 'OTHER' }, // Mapping Immigration to OTHER as it's not in AreaOfLaw
+  { label: 'Intellectual Property', value: 'OTHER' }, // Mapping IP to OTHER as it's not in AreaOfLaw
+  { label: 'Environmental', value: 'OTHER' }, // Mapping to OTHER
+  { label: 'Constitutional Law', value: 'CONSTITUTIONAL_LAW' },
+  { label: 'Banking Law', value: 'BANKING_LAW' },
+  { label: 'Cyber Law', value: 'CYBER_LAW' },
 ];
 
 // Service Areas (Cities)
@@ -131,7 +139,7 @@ const LANGUAGES: { label: string; value: 'EN' | 'UR' }[] = [
 export const LawyerProfileEditScreen: React.FC = () => {
   const theme = useAppTheme();
   const navigation = useNavigation();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
 
   // Form State
@@ -216,13 +224,56 @@ export const LawyerProfileEditScreen: React.FC = () => {
   };
 
   // Handle profile image edit
-  const handleEditImage = () => {
-    // TODO: Implement image picker
-    Alert.alert(
-      'Change Profile Picture',
-      'This feature will allow you to upload a new profile picture.',
-      [{ text: 'OK' }]
-    );
+  // Handle profile image edit
+  const handleEditImage = async () => {
+    try {
+      // request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
+        return;
+      }
+
+      // pick image
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaType.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+
+        // Show loading
+        setIsSaving(true); // Re-using isSaving for loading indicator on button or we could add specific loading state
+
+        try {
+          if (!user?.uid) throw new Error('User not found');
+
+          // Create blob
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+
+          // Upload
+          const downloadUrl = await uploadProfileImage(user.uid, blob);
+
+          // Update form
+          setFormData(prev => ({ ...prev, profileImage: downloadUrl }));
+
+          Alert.alert('Success', 'Profile image uploaded successfully');
+        } catch (error) {
+          console.error('Upload error:', error);
+          Alert.alert('Error', 'Failed to upload image');
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    } catch (error) {
+      console.error('Pick image error:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
   };
 
   // Validate form
@@ -243,7 +294,8 @@ export const LawyerProfileEditScreen: React.FC = () => {
       Alert.alert('Validation Error', 'Please enter your license number');
       return false;
     }
-    if (!formData.experienceYears || parseInt(formData.experienceYears) < 0) {
+    const experience = parseInt(formData.experienceYears);
+    if (!formData.experienceYears || isNaN(experience) || experience < 0) {
       Alert.alert('Validation Error', 'Please enter valid years of experience');
       return false;
     }
@@ -275,23 +327,51 @@ export const LawyerProfileEditScreen: React.FC = () => {
         throw new Error('User not authenticated');
       }
 
+      // Helper to safe parse numbers
+      const parseNumber = (val: string) => {
+        if (!val) return undefined;
+        const num = parseFloat(val);
+        return isNaN(num) ? undefined : num;
+      };
+
       // Prepare update data
       const updateData = {
         fullName: formData.fullName,
         bio: formData.bio,
         barId: formData.barId,
         licenseNumber: formData.licenseNumber,
-        experienceYears: parseInt(formData.experienceYears),
+        experienceYears: parseInt(formData.experienceYears) || 0,
         specializations: formData.practiceAreas,
         serviceAreas: formData.serviceAreas,
-        consultationFee: formData.consultationFee ? parseFloat(formData.consultationFee) : undefined,
-        hourlyRate: formData.hourlyRate ? parseFloat(formData.hourlyRate) : undefined,
+        consultationFee: parseNumber(formData.consultationFee),
+        hourlyRate: parseNumber(formData.hourlyRate),
         languages: formData.languages,
+        profileImage: formData.profileImage, // Add profile image
         updatedAt: new Date(),
       };
 
-      // Update profile
+      // Update lawyer profile
       await updateLawyerProfile(user.uid, updateData);
+
+      // ALSO Update the base User Profile in 'users' collection so AuthContext sees changes
+      await updateUserProfile(user.uid, {
+        displayName: formData.fullName,
+        phone: formData.phone,
+        // If your UserProfile type has photoURL or profileImage, add it here.
+        // Assuming we need to sync basic info:
+        updatedAt: new Date(),
+      });
+
+      // ALSO Update Firebase Auth Profile (Critical for some UI parts that use auth.currentUser)
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: formData.fullName,
+          photoURL: formData.profileImage
+        });
+      }
+
+      // Refresh local user state so changes are reflected globally
+      await refreshUser();
 
       Alert.alert(
         'Success',

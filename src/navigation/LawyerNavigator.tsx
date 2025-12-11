@@ -79,6 +79,9 @@ const TabIcon: React.FC<{
         </View>
       )}
       <RNText
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
         style={[
           styles.tabLabel,
           { color: focused ? theme.colors.brand.primary : theme.colors.text.tertiary },
@@ -310,6 +313,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 8,
+    width: '100%',
   },
   activeIconBg: {
     width: 44,
@@ -317,18 +321,20 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   inactiveIconBg: {
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 8.5,
     fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: -0.3,
   },
 });
 

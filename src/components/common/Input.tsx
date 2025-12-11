@@ -83,6 +83,7 @@ export const Input: React.FC<InputProps> = ({
         useNativeDriver: false,
       }).start();
       if (!value) {
+        labelIsUp.current = false;
         Animated.timing(labelAnim, {
           toValue: 0,
           duration: 200,
@@ -94,9 +95,13 @@ export const Input: React.FC<InputProps> = ({
     [onBlur, value, focusAnim, labelAnim]
   );
 
+  // Track if label is animated up
+  const labelIsUp = useRef(!!value);
+
   // Update label animation when value changes
   useEffect(() => {
-    if (value && labelAnim._value === 0) {
+    if (value && !labelIsUp.current) {
+      labelIsUp.current = true;
       Animated.timing(labelAnim, {
         toValue: 1,
         duration: 200,
@@ -137,12 +142,12 @@ export const Input: React.FC<InputProps> = ({
   const borderColor = error
     ? theme.colors.status.error
     : focusAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [
-          theme.colors.input.border,
-          theme.colors.input.borderFocus,
-        ],
-      });
+      inputRange: [0, 1],
+      outputRange: [
+        theme.colors.input.border,
+        theme.colors.input.borderFocus,
+      ],
+    });
 
   // Interpolate translate X for shake
   const translateX = shakeAnim.interpolate({
@@ -164,12 +169,12 @@ export const Input: React.FC<InputProps> = ({
   const labelColor = error
     ? theme.colors.status.error
     : focusAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [
-          theme.colors.input.placeholder,
-          theme.colors.input.borderFocus,
-        ],
-      });
+      inputRange: [0, 1],
+      outputRange: [
+        theme.colors.input.placeholder,
+        theme.colors.input.borderFocus,
+      ],
+    });
 
   // Toggle password visibility
   const togglePasswordVisibility = () => {
@@ -181,97 +186,99 @@ export const Input: React.FC<InputProps> = ({
 
   return (
     <View style={[styles.wrapper, containerStyle]}>
-      <Animated.View
-        style={[
-          styles.container,
-          {
-            backgroundColor: theme.colors.input.background,
-            borderRadius: theme.borderRadius.md,
-            height: theme.inputHeight.md,
-            borderWidth: 2,
-            borderColor,
-            transform: [{ translateX }],
-          },
-          disabled && { opacity: 0.5 },
-        ]}
-      >
-        {/* Left Icon */}
-        {leftIcon && (
-          <View style={styles.leftIconContainer}>
-            <Ionicons
-              name={leftIcon}
-              size={20}
-              color={
-                error
-                  ? theme.colors.status.error
-                  : isFocused
-                  ? theme.colors.input.borderFocus
-                  : theme.colors.input.placeholder
-              }
+      {/* Shake animation wrapper - uses native driver */}
+      <Animated.View style={{ transform: [{ translateX }] }}>
+        <Animated.View
+          style={[
+            styles.container,
+            {
+              backgroundColor: theme.colors.input.background,
+              borderRadius: theme.borderRadius.md,
+              height: theme.inputHeight.md,
+              borderWidth: 2,
+              borderColor,
+            },
+            disabled && { opacity: 0.5 },
+          ]}
+        >
+          {/* Left Icon */}
+          {leftIcon && (
+            <View style={styles.leftIconContainer}>
+              <Ionicons
+                name={leftIcon}
+                size={20}
+                color={
+                  error
+                    ? theme.colors.status.error
+                    : isFocused
+                      ? theme.colors.input.borderFocus
+                      : theme.colors.input.placeholder
+                }
+              />
+            </View>
+          )}
+
+          {/* Input Container */}
+          <View style={styles.inputContainer}>
+            {/* Floating Label */}
+            <Animated.Text
+              style={[
+                styles.label,
+                {
+                  left: leftIcon ? 44 : 16,
+                  backgroundColor: theme.colors.input.background,
+                  color: labelColor,
+                  transform: [
+                    { translateY: labelTranslateY },
+                    { scale: labelScale },
+                  ],
+                },
+              ]}
+            >
+              {label}
+            </Animated.Text>
+
+            {/* Text Input */}
+            <TextInput
+              ref={inputRef}
+              style={[
+                styles.input,
+                {
+                  color: theme.colors.text.primary,
+                  paddingLeft: leftIcon ? 44 : 16,
+                  paddingRight: rightIcon || secureTextEntry ? 44 : 16,
+                },
+              ]}
+              value={value}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              editable={!disabled}
+              secureTextEntry={actualSecureTextEntry}
+              placeholderTextColor={theme.colors.input.placeholder}
+              {...props}
             />
           </View>
-        )}
 
-        {/* Input Container */}
-        <View style={styles.inputContainer}>
-          {/* Floating Label */}
-          <Animated.Text
-            style={[
-              styles.label,
-              {
-                left: leftIcon ? 44 : 16,
-                backgroundColor: theme.colors.input.background,
-                color: labelColor,
-                transform: [
-                  { translateY: labelTranslateY },
-                  { scale: labelScale },
-                ],
-              },
-            ]}
-          >
-            {label}
-          </Animated.Text>
-
-          {/* Text Input */}
-          <TextInput
-            ref={inputRef}
-            style={[
-              styles.input,
-              {
-                color: theme.colors.text.primary,
-                paddingLeft: leftIcon ? 44 : 16,
-                paddingRight: rightIcon || secureTextEntry ? 44 : 16,
-              },
-            ]}
-            value={value}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            editable={!disabled}
-            secureTextEntry={actualSecureTextEntry}
-            placeholderTextColor={theme.colors.input.placeholder}
-            {...props}
-          />
-        </View>
-
-        {/* Right Icon / Password Toggle */}
-        {(rightIcon || secureTextEntry) && (
-          <TouchableOpacity
-            style={styles.rightIconContainer}
-            onPress={secureTextEntry ? togglePasswordVisibility : onRightIconPress}
-          >
-            <Ionicons
-              name={
-                secureTextEntry
-                  ? isPasswordVisible
-                    ? 'eye-off-outline'
-                    : 'eye-outline'
-                  : rightIcon!
-              }
-              size={20}
-              color={theme.colors.input.placeholder}
-            />
-          </TouchableOpacity>
-        )}
+          {/* Right Icon / Password Toggle */}
+          {(rightIcon || secureTextEntry) && (
+            <TouchableOpacity
+              style={styles.rightIconContainer}
+              onPress={secureTextEntry ? togglePasswordVisibility : onRightIconPress}
+            >
+              <Ionicons
+                name={
+                  secureTextEntry
+                    ? isPasswordVisible
+                      ? 'eye-off-outline'
+                      : 'eye-outline'
+                    : rightIcon!
+                }
+                size={20}
+                color={theme.colors.input.placeholder}
+              />
+            </TouchableOpacity>
+          )}
+        </Animated.View>
       </Animated.View>
 
       {/* Error or Hint */}
