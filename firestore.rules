@@ -38,6 +38,15 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
+
+      // User subcollections
+      match /favorites/{favoriteId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /blocked/{blockedId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Client profiles
@@ -280,5 +289,12 @@ service cloud.firestore {
 
     // Note: getUserCases would require a more complex implementation
     // Consider using Cloud Functions for complex authorization logic
+
+    // Follows
+    match /follows/{followId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.followerId == request.auth.uid;
+      allow delete: if isOwner(resource.data.followerId);
+    }
   }
 }
