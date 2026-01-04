@@ -285,7 +285,7 @@ export const MyBidsScreen: React.FC = () => {
                 color={theme.colors.brand.primary}
               />
               <Text variant="labelMedium" color="primary" style={styles.bidDetailText}>
-                PKR {item.proposedFee.toLocaleString()}
+                PKR {(item.proposedFee || 0).toLocaleString()}
                 {item.feeType === 'HOURLY' && '/hr'}
               </Text>
             </View>
@@ -421,11 +421,11 @@ export const MyBidsScreen: React.FC = () => {
     const count = tab === 'All'
       ? bids.length
       : bids.filter((bid) => {
-          if (tab === 'Pending') return bid.status === 'PENDING';
-          if (tab === 'Accepted') return bid.status === 'ACCEPTED';
-          if (tab === 'Rejected') return bid.status === 'REJECTED' || bid.status === 'WITHDRAWN';
-          return false;
-        }).length;
+        if (tab === 'Pending') return bid.status === 'PENDING';
+        if (tab === 'Accepted') return bid.status === 'ACCEPTED';
+        if (tab === 'Rejected') return bid.status === 'REJECTED' || bid.status === 'WITHDRAWN';
+        return false;
+      }).length;
 
     return (
       <TouchableOpacity

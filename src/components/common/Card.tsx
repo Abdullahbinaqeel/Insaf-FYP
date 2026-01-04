@@ -11,6 +11,7 @@ import {
   StyleSheet,
   ViewStyle,
   Animated,
+  StyleProp,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../../context/ThemeContext';
@@ -30,7 +31,7 @@ interface CardProps {
   disabled?: boolean;
   animation?: AnimationPreset;
   animationDelay?: number;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 export const Card: React.FC<CardProps> = ({

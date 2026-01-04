@@ -4,101 +4,41 @@
  * Detailed view of a case with timeline and bids
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { Text } from '../../components/common/Text';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
+import { useAuth } from '../../context/AuthContext';
+import { getCaseById, Case } from '../../services/case.service';
+import { getBidsForCase, Bid } from '../../services/bid.service';
+import { getUserProfile } from '../../services/auth.service';
+
+type CaseDetailRouteProp = RouteProp<{ CaseDetail: { caseId: string } }, 'CaseDetail'>;
 
 const { width } = Dimensions.get('window');
 
-// Sample Case Data
-const CASE_DATA = {
-  id: '1',
-  caseNumber: 'INS-2024-001',
-  title: 'Property Dispute Resolution',
-  description: 'Land ownership dispute in Lahore regarding inherited property rights. Need legal representation to establish rightful ownership and resolve conflict with other claimants.',
-  status: 'active',
-  category: 'Property Law',
-  budget: 50000,
-  createdAt: '2024-01-15',
-  updatedAt: '2 hours ago',
-  lawyer: {
-    name: 'Adv. Ahmad Khan',
-    specialty: 'Property Law',
-    rating: 4.9,
-  },
-  documents: [
-    { id: '1', name: 'Property_Deed.pdf', size: '2.4 MB', date: 'Jan 15, 2024' },
-    { id: '2', name: 'Inheritance_Proof.pdf', size: '1.8 MB', date: 'Jan 15, 2024' },
-    { id: '3', name: 'Survey_Report.pdf', size: '3.2 MB', date: 'Jan 16, 2024' },
-  ],
-  timeline: [
-    { id: '1', event: 'Case Created', date: 'Jan 15, 2024', description: 'Case filed for property dispute' },
-    { id: '2', event: 'Lawyer Assigned', date: 'Jan 18, 2024', description: 'Adv. Ahmad Khan accepted the case' },
-    { id: '3', event: 'Documents Submitted', date: 'Jan 20, 2024', description: 'Property documents uploaded' },
-    { id: '4', event: 'First Hearing', date: 'Feb 5, 2024', description: 'Scheduled at Civil Court Lahore' },
-  ],
-  milestones: [
-    { id: '1', title: 'Initial Consultation', amount: 10000, status: 'completed' },
-    { id: '2', title: 'Document Preparation', amount: 15000, status: 'in_progress' },
-    { id: '3', title: 'Court Filing', amount: 10000, status: 'pending' },
-    { id: '4', title: 'Hearing & Representation', amount: 15000, status: 'pending' },
-  ],
-};
-
-// Sample Bids Data
-const BIDS = [
-  {
-    id: '1',
-    lawyerName: 'Adv. Fatima Zahra',
-    specialty: 'Property Law',
-    experience: '10 years',
-    rating: 4.6,
-    amount: 45000,
-    proposal: 'I have extensive experience in property disputes. I can help resolve this matter efficiently.',
-    deliveryTime: '3-4 months',
-  },
-  {
-    id: '2',
-    lawyerName: 'Adv. Bilal Ahmed',
-    specialty: 'Civil Law',
-    experience: '8 years',
-    rating: 4.5,
-    amount: 40000,
-    proposal: 'Specialized in land disputes with high success rate in Lahore courts.',
-    deliveryTime: '4-5 months',
-  },
-  {
-    id: '3',
-    lawyerName: 'Adv. Imran Shah',
-    specialty: 'Property Law',
-    experience: '20 years',
-    rating: 4.7,
-    amount: 55000,
-    proposal: 'Senior advocate with direct experience in property inheritance cases.',
-    deliveryTime: '2-3 months',
-  },
-];
-
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'active': return '#4CAF50';
-    case 'bidding': return '#2196F3';
-    case 'completed': return '#9C27B0';
-    case 'in_progress': return '#FF9800';
-    case 'pending': return '#757575';
+    case 'POSTED': return '#4CAF50';
+    case 'BIDDING': return '#2196F3';
+    case 'COMPLETED': return '#9C27B0';
+    case 'IN_PROGRESS': return '#FF9800';
+    case 'ASSIGNED': return '#009688';
+    case 'DRAFT': return '#757575';
     default: return '#757575';
   }
 };
@@ -107,9 +47,72 @@ export const CaseDetailScreen: React.FC = () => {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const [activeTab, setActiveTab] = useState('overview');
+  const route = useRoute<CaseDetailRouteProp>();
+  const { user } = useAuth();
+  const { caseId } = route.params;
 
-  const caseData = CASE_DATA;
+  const [activeTab, setActiveTab] = useState('overview');
+  const [caseData, setCaseData] = useState<Case | null>(null);
+  const [bids, setBids] = useState<Bid[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lawyer, setLawyer] = useState<any>(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const fetchedCase = await getCaseById(caseId);
+        setCaseData(fetchedCase);
+
+        if (fetchedCase) {
+          // If case is assigned, fetch lawyer details
+          if (fetchedCase.lawyerId) {
+            const lawyerProfile = await getUserProfile(fetchedCase.lawyerId);
+            setLawyer(lawyerProfile);
+          }
+        }
+
+        // Fetch bids (only count is needed for lawyer view usually, but we fetch to check ownership)
+        const fetchedBids = await getBidsForCase(caseId);
+        setBids(fetchedBids);
+
+      } catch (error) {
+        console.error('Error loading case detail:', error);
+        Alert.alert('Error', 'Failed to load case details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (caseId) {
+      loadData();
+    }
+  }, [caseId]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer, { backgroundColor: theme.colors.background.primary }]}>
+        <ActivityIndicator size="large" color={theme.colors.brand.primary} />
+      </View>
+    );
+  }
+
+  if (!caseData) {
+    return (
+      <View style={[styles.container, styles.loadingContainer, { backgroundColor: theme.colors.background.primary }]}>
+        <Text>Case not found</Text>
+      </View>
+    );
+  }
+
+  const isAssigned = caseData.status === 'ASSIGNED' || caseData.status === 'IN_PROGRESS' || caseData.status === 'COMPLETED';
+  const isOwner = user?.uid === caseData.clientId;
+
+  // Lawyer view logic:
+  // If user is NOT the owner (i.e., a lawyer viewing available cases), they should NOT see detailed bids of others.
+  // They should only see their own bid if they made one.
+  const myBid = !isOwner ? bids.find(b => b.lawyerId === user?.uid) : null;
+  const showBidsTab = isOwner || myBid;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
@@ -139,7 +142,7 @@ export const CaseDetailScreen: React.FC = () => {
             <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(caseData.status)}20` }]}>
               <View style={[styles.statusDot, { backgroundColor: getStatusColor(caseData.status) }]} />
               <Text variant="caption" style={{ color: getStatusColor(caseData.status) }}>
-                Active
+                {caseData.status.replace('_', ' ')}
               </Text>
             </View>
             <Text variant="h2" style={styles.caseTitle} numberOfLines={2}>
@@ -154,24 +157,27 @@ export const CaseDetailScreen: React.FC = () => {
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Ionicons name="briefcase-outline" size={18} color="rgba(255,255,255,0.7)" />
-              <Text variant="caption" style={styles.statLabel}>{caseData.category}</Text>
+              <Text variant="caption" style={styles.statLabel}>{caseData.areaOfLaw.replace('_', ' ')}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Ionicons name="cash-outline" size={18} color="rgba(255,255,255,0.7)" />
-              <Text variant="caption" style={styles.statLabel}>Rs. {caseData.budget.toLocaleString()}</Text>
+              <Text variant="caption" style={styles.statLabel}>
+                {(caseData.budgetMin || 0).toLocaleString()} - {(caseData.budgetMax || 0).toLocaleString()}
+              </Text>
             </View>
             <View style={styles.statDivider} />
+            {/* Show Bid Count for Lawyers */}
             <View style={styles.statItem}>
-              <Ionicons name="time-outline" size={18} color="rgba(255,255,255,0.7)" />
-              <Text variant="caption" style={styles.statLabel}>{caseData.updatedAt}</Text>
+              <Ionicons name="hand-left-outline" size={18} color="rgba(255,255,255,0.7)" />
+              <Text variant="caption" style={styles.statLabel}>{bids.length} Bids</Text>
             </View>
           </View>
         </LinearGradient>
 
         {/* Tabs */}
         <View style={styles.tabsContainer}>
-          {['overview', 'bids', 'timeline', 'documents'].map((tab) => (
+          {['overview', 'timeline'].map((tab) => (
             <TouchableOpacity
               key={tab}
               style={[
@@ -188,6 +194,24 @@ export const CaseDetailScreen: React.FC = () => {
               </Text>
             </TouchableOpacity>
           ))}
+          {/* Only show Bids tab if owner or has bid */}
+          {(showBidsTab) && (
+            <TouchableOpacity
+              key="bids"
+              style={[
+                styles.tab,
+                activeTab === 'bids' && { borderBottomColor: theme.colors.brand.primary, borderBottomWidth: 2 },
+              ]}
+              onPress={() => setActiveTab('bids')}
+            >
+              <Text
+                variant="labelMedium"
+                style={{ color: activeTab === 'bids' ? theme.colors.brand.primary : theme.colors.text.secondary }}
+              >
+                Bids
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Content */}
@@ -204,8 +228,8 @@ export const CaseDetailScreen: React.FC = () => {
                 </Card>
               </View>
 
-              {/* Assigned Lawyer */}
-              {caseData.lawyer && (
+              {/* Assigned Lawyer - Only show if assigned and user is allowed to see (Owner or the assigned lawyer) */}
+              {isAssigned && lawyer && (isOwner || user?.uid === caseData.lawyerId) && (
                 <View>
                   <Text variant="h4" color="primary" style={styles.sectionTitle}>Assigned Lawyer</Text>
                   <Card style={styles.lawyerCard}>
@@ -217,12 +241,8 @@ export const CaseDetailScreen: React.FC = () => {
                         <Ionicons name="person" size={24} color="#d4af37" />
                       </LinearGradient>
                       <View style={styles.lawyerInfo}>
-                        <Text variant="labelLarge" color="primary">{caseData.lawyer.name}</Text>
-                        <Text variant="caption" color="secondary">{caseData.lawyer.specialty}</Text>
-                        <View style={styles.ratingRow}>
-                          <Ionicons name="star" size={12} color="#d4af37" />
-                          <Text variant="caption" color="secondary"> {caseData.lawyer.rating}</Text>
-                        </View>
+                        <Text variant="labelLarge" color="primary">{lawyer.displayName}</Text>
+                        <Text variant="caption" color="secondary">{lawyer.email}</Text>
                       </View>
                       <TouchableOpacity>
                         <Ionicons name="chatbubble-outline" size={22} color={theme.colors.brand.primary} />
@@ -232,47 +252,26 @@ export const CaseDetailScreen: React.FC = () => {
                 </View>
               )}
 
-              {/* Milestones */}
-              <View>
-                <Text variant="h4" color="primary" style={styles.sectionTitle}>Payment Milestones</Text>
-                <Card style={styles.milestonesCard}>
-                  {caseData.milestones.map((milestone, index) => (
-                    <View
-                      key={milestone.id}
-                      style={[
-                        styles.milestoneItem,
-                        index < caseData.milestones.length - 1 && styles.milestoneBorder,
-                      ]}
-                    >
-                      <View style={[styles.milestoneStatus, { backgroundColor: `${getStatusColor(milestone.status)}15` }]}>
-                        <Ionicons
-                          name={milestone.status === 'completed' ? 'checkmark' : milestone.status === 'in_progress' ? 'timer' : 'ellipse'}
-                          size={16}
-                          color={getStatusColor(milestone.status)}
-                        />
-                      </View>
-                      <View style={styles.milestoneInfo}>
-                        <Text variant="labelMedium" color="primary">{milestone.title}</Text>
-                        <Text variant="caption" color="tertiary">
-                          {milestone.status.charAt(0).toUpperCase() + milestone.status.slice(1).replace('_', ' ')}
-                        </Text>
-                      </View>
-                      <Text variant="labelMedium" color="brand">
-                        Rs. {milestone.amount.toLocaleString()}
-                      </Text>
-                    </View>
-                  ))}
-                </Card>
-              </View>
+              {/* Show Bid Button for Lawyers if not assigned and no bid yet */}
+              {!isOwner && !isAssigned && !myBid && (
+                <View style={{ marginTop: 24 }}>
+                  <Button
+                    title="Submit A Bid"
+                    variant="gradient"
+                    onPress={() => (navigation as any).navigate('SubmitBid', { caseId: caseData.id })}
+                  />
+                </View>
+              )}
             </>
           )}
 
           {activeTab === 'bids' && (
             <View>
               <Text variant="h4" color="primary" style={styles.sectionTitle}>
-                Received Bids ({BIDS.length})
+                {isOwner ? `Received Bids (${bids.length})` : 'My Bid'}
               </Text>
-              {BIDS.map((bid) => (
+              {/* If Owner: Show all bids. If Lawyer: Show only myBid */}
+              {(isOwner ? bids : (myBid ? [myBid] : [])).map((bid) => (
                 <Card key={bid.id} style={styles.bidCard}>
                   <View style={styles.bidHeader}>
                     <LinearGradient
@@ -282,33 +281,44 @@ export const CaseDetailScreen: React.FC = () => {
                       <Ionicons name="person" size={20} color="#d4af37" />
                     </LinearGradient>
                     <View style={styles.bidInfo}>
-                      <Text variant="labelLarge" color="primary">{bid.lawyerName}</Text>
+                      {/* Lawyer Name is visible to Owner */}
+                      <Text variant="labelLarge" color="primary">{isOwner ? 'Lawyer Bid' : 'My Proposal'}</Text>
                       <Text variant="caption" color="secondary">
-                        {bid.specialty} • {bid.experience}
+                        {new Date(bid.createdAt.toDate()).toLocaleDateString()}
                       </Text>
-                    </View>
-                    <View style={styles.bidRating}>
-                      <Ionicons name="star" size={12} color="#d4af37" />
-                      <Text variant="caption" color="secondary"> {bid.rating}</Text>
                     </View>
                   </View>
                   <Text variant="bodySmall" color="secondary" style={styles.bidProposal}>
-                    {bid.proposal}
+                    {bid.proposalText}
                   </Text>
                   <View style={styles.bidFooter}>
                     <View>
                       <Text variant="caption" color="tertiary">Bid Amount</Text>
-                      <Text variant="h4" color="brand">Rs. {bid.amount.toLocaleString()}</Text>
+                      <Text variant="h4" color="brand">Rs. {(bid.proposedFee || 0).toLocaleString()}</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
                       <Text variant="caption" color="tertiary">Delivery</Text>
-                      <Text variant="labelMedium" color="primary">{bid.deliveryTime}</Text>
+                      <Text variant="labelMedium" color="primary">{bid.estimatedTimeline}</Text>
                     </View>
                   </View>
-                  <View style={styles.bidActions}>
-                    <Button title="View Profile" variant="outline" size="sm" style={{ flex: 1, marginRight: 8 }} />
-                    <Button title="Accept Bid" variant="gradient" size="sm" style={{ flex: 1 }} />
-                  </View>
+                  {isOwner && (
+                    <View style={styles.bidActions}>
+                      <Button
+                        title="View Profile"
+                        variant="outline"
+                        size="sm"
+                        style={{ flex: 1, marginRight: 8 }}
+                        onPress={() => Alert.alert('View Profile', 'Navigate to lawyer profile')}
+                      />
+                      <Button
+                        title="Accept Bid"
+                        variant="gradient"
+                        size="sm"
+                        style={{ flex: 1 }}
+                        onPress={() => Alert.alert('Accept Bid', 'Implement accept bid logic')}
+                      />
+                    </View>
+                  )}
                 </Card>
               ))}
             </View>
@@ -316,54 +326,7 @@ export const CaseDetailScreen: React.FC = () => {
 
           {activeTab === 'timeline' && (
             <View>
-              <Text variant="h4" color="primary" style={styles.sectionTitle}>Case Timeline</Text>
-              <View style={styles.timeline}>
-                {caseData.timeline.map((event, index) => (
-                  <View key={event.id} style={styles.timelineItem}>
-                    <View style={styles.timelineLeft}>
-                      <View style={[styles.timelineDot, { backgroundColor: theme.colors.brand.primary }]} />
-                      {index < caseData.timeline.length - 1 && (
-                        <View style={[styles.timelineLine, { backgroundColor: theme.colors.border.light }]} />
-                      )}
-                    </View>
-                    <Card style={styles.timelineCard}>
-                      <Text variant="labelMedium" color="primary">{event.event}</Text>
-                      <Text variant="bodySmall" color="secondary" style={{ marginTop: 4 }}>
-                        {event.description}
-                      </Text>
-                      <Text variant="caption" color="tertiary" style={{ marginTop: 8 }}>
-                        {event.date}
-                      </Text>
-                    </Card>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {activeTab === 'documents' && (
-            <View>
-              <View style={styles.docsHeader}>
-                <Text variant="h4" color="primary">Documents ({caseData.documents.length})</Text>
-                <TouchableOpacity style={styles.uploadButton}>
-                  <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.brand.primary} />
-                  <Text variant="labelSmall" color="brand" style={{ marginLeft: 4 }}>Upload</Text>
-                </TouchableOpacity>
-              </View>
-              {caseData.documents.map((doc) => (
-                <Card key={doc.id} style={styles.documentCard}>
-                  <View style={[styles.docIcon, { backgroundColor: `${theme.colors.brand.primary}15` }]}>
-                    <Ionicons name="document-text" size={24} color={theme.colors.brand.primary} />
-                  </View>
-                  <View style={styles.docInfo}>
-                    <Text variant="labelMedium" color="primary">{doc.name}</Text>
-                    <Text variant="caption" color="tertiary">{doc.size} • {doc.date}</Text>
-                  </View>
-                  <TouchableOpacity>
-                    <Ionicons name="download-outline" size={22} color={theme.colors.text.secondary} />
-                  </TouchableOpacity>
-                </Card>
-              ))}
+              <Text>Timeline implementation dependent on real data structure</Text>
             </View>
           )}
         </View>
@@ -377,6 +340,10 @@ export const CaseDetailScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     paddingBottom: 24,
@@ -460,11 +427,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.05)',
+    justifyContent: 'space-around'
   },
   tab: {
-    flex: 1,
     paddingVertical: 16,
     alignItems: 'center',
+    paddingHorizontal: 12
   },
   content: {
     padding: 20,
@@ -497,35 +465,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
   },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  milestonesCard: {
-    padding: 0,
-    overflow: 'hidden',
-  },
-  milestoneItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  milestoneBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-  },
-  milestoneStatus: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  milestoneInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
   bidCard: {
     padding: 16,
     marginBottom: 12,
@@ -546,10 +485,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
   },
-  bidRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   bidProposal: {
     marginBottom: 12,
     lineHeight: 20,
@@ -564,60 +499,6 @@ const styles = StyleSheet.create({
   },
   bidActions: {
     flexDirection: 'row',
-  },
-  timeline: {
-    marginTop: 8,
-  },
-  timelineItem: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  timelineLeft: {
-    alignItems: 'center',
-    width: 24,
-  },
-  timelineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  timelineLine: {
-    width: 2,
-    flex: 1,
-    marginTop: 4,
-  },
-  timelineCard: {
-    flex: 1,
-    marginLeft: 12,
-    padding: 16,
-  },
-  docsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    marginTop: 8,
-  },
-  uploadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  documentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 10,
-  },
-  docIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  docInfo: {
-    flex: 1,
-    marginLeft: 12,
   },
 });
 

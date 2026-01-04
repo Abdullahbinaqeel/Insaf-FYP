@@ -79,15 +79,16 @@ export interface LawyerWallet {
   lawyerId: string;
   availableBalance: number;
   pendingBalance: number;
+  escrowBalance: number; // Funds held in escrow for active cases
   totalEarned: number;
   totalWithdrawn: number;
   lastUpdated: Timestamp;
 }
 
 // Constants
-const PLATFORM_FEE_PERCENT = 0.15; // 15% platform fee
-const MINIMUM_PAYOUT = 1000; // Minimum PKR for withdrawal
-const PAYOUT_HOLD_DAYS = 7; // Days before funds are available
+export const PLATFORM_FEE_PERCENT = 0.15; // 15% platform fee
+export const MINIMUM_PAYOUT = 1000; // Minimum PKR for withdrawal
+export const PAYOUT_HOLD_DAYS = 7; // Days before funds are available
 
 // Functions
 
@@ -103,6 +104,7 @@ export const initializeLawyerWallet = async (lawyerId: string): Promise<void> =>
       lawyerId,
       availableBalance: 0,
       pendingBalance: 0,
+      escrowBalance: 0,
       totalEarned: 0,
       totalWithdrawn: 0,
       lastUpdated: serverTimestamp(),
@@ -113,6 +115,7 @@ export const initializeLawyerWallet = async (lawyerId: string): Promise<void> =>
         lawyerId,
         availableBalance: 0,
         pendingBalance: 0,
+        escrowBalance: 0,
         totalEarned: 0,
         totalWithdrawn: 0,
         lastUpdated: serverTimestamp(),

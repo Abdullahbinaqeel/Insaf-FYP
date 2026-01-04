@@ -74,6 +74,7 @@ export const WalletScreen: React.FC = () => {
             escrowBalance: 0,
             totalEarned: 0,
             totalWithdrawn: 0,
+            lastUpdated: Timestamp.now(), // Added missing property
           };
         }
 
@@ -131,8 +132,8 @@ export const WalletScreen: React.FC = () => {
     }
   };
 
-  const formatCurrency = (amount: number): string => {
-    return `PKR ${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number | undefined): string => {
+    return `PKR ${(amount || 0).toLocaleString()}`;
   };
 
   if (loading) {
@@ -303,10 +304,10 @@ export const WalletScreen: React.FC = () => {
                 </View>
                 <View style={styles.methodInfo}>
                   <Text variant="labelMedium" color="primary">
-                    {method.type === 'BANK_ACCOUNT' ? method.bankName : method.type.replace('_', ' ')}
+                    {method.type === 'BANK_ACCOUNT' ? method.details.bankName : method.type.replace('_', ' ')}
                   </Text>
                   <Text variant="caption" color="tertiary">
-                    {method.type === 'BANK_ACCOUNT' ? `****${method.accountNumber?.slice(-4)}` : method.phoneNumber}
+                    {method.type === 'BANK_ACCOUNT' ? `****${method.details.accountNumber?.slice(-4)}` : method.details.phoneNumber}
                   </Text>
                 </View>
                 {method.isDefault && (
@@ -376,10 +377,10 @@ export const WalletScreen: React.FC = () => {
                 />
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text variant="labelMedium" color="primary">
-                    {method.type === 'BANK_ACCOUNT' ? method.bankName : method.type.replace('_', ' ')}
+                    {method.type === 'BANK_ACCOUNT' ? method.details.bankName : method.type.replace('_', ' ')}
                   </Text>
                   <Text variant="caption" color="tertiary">
-                    {method.type === 'BANK_ACCOUNT' ? `****${method.accountNumber?.slice(-4)}` : method.phoneNumber}
+                    {method.type === 'BANK_ACCOUNT' ? `****${method.details.accountNumber?.slice(-4)}` : method.details.phoneNumber}
                   </Text>
                 </View>
                 {selectedMethod?.id === method.id && (

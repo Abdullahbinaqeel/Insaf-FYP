@@ -66,8 +66,8 @@ const formatAreaOfLaw = (areaOfLaw: AreaOfLaw): string => {
 };
 
 // Format budget range
-const formatBudget = (min: number, max: number): string => {
-  return `PKR ${min.toLocaleString()} - ${max.toLocaleString()}`;
+const formatBudget = (min: number | undefined, max: number | undefined): string => {
+  return `PKR ${(min || 0).toLocaleString()} - ${(max || 0).toLocaleString()}`;
 };
 
 export const SubmitBidScreen: React.FC = () => {
@@ -75,7 +75,7 @@ export const SubmitBidScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<SubmitBidScreenRouteProp>();
-  const { currentUser } = useAuth();
+  const { user } = useAuth();
 
   const { caseId } = route.params;
 
@@ -185,7 +185,7 @@ export const SubmitBidScreen: React.FC = () => {
       return;
     }
 
-    if (!currentUser?.uid) {
+    if (!user?.uid) {
       Alert.alert('Error', 'You must be logged in to submit a bid');
       return;
     }
@@ -193,7 +193,7 @@ export const SubmitBidScreen: React.FC = () => {
     try {
       setSubmitting(true);
 
-      await createBid(currentUser.uid, {
+      await createBid(user.uid, {
         caseId,
         proposedFee: parseFloat(proposedFee),
         feeType,
@@ -619,8 +619,8 @@ export const SubmitBidScreen: React.FC = () => {
                       borderColor: errors.terms
                         ? theme.colors.status.error
                         : termsAccepted
-                        ? theme.colors.brand.primary
-                        : theme.colors.border.default,
+                          ? theme.colors.brand.primary
+                          : theme.colors.border.default,
                     },
                   ]}
                 >

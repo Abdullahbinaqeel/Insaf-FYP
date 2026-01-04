@@ -223,8 +223,8 @@ export const LawyerDashboardScreen: React.FC = () => {
     }
   };
 
-  const formatCurrency = (amount: number): string => {
-    return `PKR ${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number | undefined): string => {
+    return `PKR ${(amount || 0).toLocaleString()}`;
   };
 
   const getGreeting = () => {
@@ -509,7 +509,7 @@ export const LawyerDashboardScreen: React.FC = () => {
         >
           <View style={styles.sectionHeader}>
             <Text variant="h4" color="primary">Recent Activity</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AllActivity')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
               <Text variant="labelMedium" color="link">View All</Text>
             </TouchableOpacity>
           </View>

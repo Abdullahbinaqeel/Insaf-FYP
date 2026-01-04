@@ -23,6 +23,7 @@ import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Text } from '../../components/common/Text';
 import { Card } from '../../components/common/Card';
+import { createTicket } from '../../services/support.service';
 
 type SupportCategory = 'general' | 'technical' | 'payment' | 'dispute' | 'verification' | 'other';
 
@@ -79,6 +80,11 @@ export const SupportScreen: React.FC = () => {
   ];
 
   const handleSubmit = async () => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to submit a ticket');
+      return;
+    }
+
     if (!subject.trim() || !message.trim()) {
       Alert.alert('Missing Information', 'Please fill in all fields');
       return;
@@ -86,8 +92,18 @@ export const SupportScreen: React.FC = () => {
 
     setSubmitting(true);
     try {
-      // TODO: Submit to backend
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await createTicket(
+        user.uid,
+        {
+          name: user.displayName,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+        },
+        category,
+        subject,
+        message
+      );
 
       Alert.alert(
         'Ticket Submitted',
@@ -104,6 +120,7 @@ export const SupportScreen: React.FC = () => {
         ]
       );
     } catch (error) {
+      console.error('Error submitting ticket:', error);
       Alert.alert('Error', 'Failed to submit ticket. Please try again.');
     } finally {
       setSubmitting(false);

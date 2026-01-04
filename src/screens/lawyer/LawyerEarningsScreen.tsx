@@ -31,7 +31,7 @@ import {
   getEarningsSummary,
   Earning,
   LawyerWallet,
-  subscribeToWallet,
+  subscribeToLawyerWallet,
   subscribeToEarnings,
 } from '../../services/earnings.service';
 import { getEarningsTrend, EarningsTrend } from '../../services/analytics.service';
@@ -139,7 +139,7 @@ export const LawyerEarningsScreen: React.FC = () => {
   useEffect(() => {
     if (!user?.uid) return;
 
-    const unsubscribeWallet = subscribeToWallet(user.uid, (newWallet) => {
+    const unsubscribeWallet = subscribeToLawyerWallet(user.uid, (newWallet: LawyerWallet | null) => {
       if (newWallet) {
         setWallet(newWallet);
       }
@@ -197,8 +197,8 @@ export const LawyerEarningsScreen: React.FC = () => {
     setRefreshing(false);
   }, [fetchEarningsData]);
 
-  const formatCurrency = (amount: number): string => {
-    return `PKR ${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number | undefined): string => {
+    return `PKR ${(amount || 0).toLocaleString()}`;
   };
 
   const formatDate = (timestamp: any): string => {
@@ -539,7 +539,7 @@ export const LawyerEarningsScreen: React.FC = () => {
                 variant="elevated"
                 style={[
                   styles.transactionCard,
-                  index === earnings.length - 1 && styles.lastTransactionCard
+                  index === earnings.length - 1 ? styles.lastTransactionCard : undefined
                 ]}
                 onPress={() => handleTransactionPress(earning)}
               >
@@ -554,8 +554,8 @@ export const LawyerEarningsScreen: React.FC = () => {
                           earning.status === 'AVAILABLE'
                             ? 'checkmark-circle'
                             : earning.status === 'PENDING'
-                            ? 'time'
-                            : 'sync'
+                              ? 'time'
+                              : 'sync'
                         }
                         size={20}
                         color={getStatusColor(earning.status)}

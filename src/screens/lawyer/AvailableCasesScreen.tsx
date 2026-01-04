@@ -64,8 +64,8 @@ const formatAreaOfLaw = (areaOfLaw: AreaOfLaw): string => {
 };
 
 // Format budget range
-const formatBudget = (min: number, max: number): string => {
-  return `PKR ${min.toLocaleString()} - ${max.toLocaleString()}`;
+const formatBudget = (min: number | undefined, max: number | undefined) => {
+  return `PKR ${(min || 0).toLocaleString()} - ${(max || 0).toLocaleString()}`;
 };
 
 // Case with bid count

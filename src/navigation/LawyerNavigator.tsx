@@ -51,6 +51,8 @@ import {
   SupportScreen,
   TermsScreen,
   PrivacyScreen,
+  FavoritesScreen,
+  BlockedAccountsScreen,
 } from '../screens/settings';
 
 const Tab = createBottomTabNavigator();
@@ -293,6 +295,16 @@ export const LawyerNavigator: React.FC = () => {
       <Stack.Screen
         name="Privacy"
         component={PrivacyScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Favorites"
+        component={FavoritesScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="BlockedAccounts"
+        component={BlockedAccountsScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>
